@@ -1,47 +1,76 @@
-# 基本设置
+# --------------------
+# LAMMPS nanoparticle impact example
+# --------------------
+
 units           metal
 atom_style      atomic
-boundary        f f f
+boundary        p p f          # periodic in x,y, fixed in z (impact direction)
 
-# 构建模拟区域
+# --------------------
+# Create simulation box and substrate
+# --------------------
 lattice         fcc 3.615
-region          box block 0 10 0 10 0 10
-create_box      1 box
+region          simbox block 0 30 0 30 0 50 units box
+create_box      1 simbox
 
-# 定义 EAM 势函数（使用 Cu_u3.eam）
+# Create substrate region (bottom slab)
+region          substrate block 0 30 0 30 0 10 units box
+create_atoms    1 region substrate
+
+mass            1 63.546
+
+# --------------------
+# Create nanoparticle projectile (sphere)
+# --------------------
+region          nanoparticle sphere 15 15 40 5 units box
+create_atoms    1 region nanoparticle
+
+# --------------------
+# Groups
+# --------------------
+group           substrate region substrate
+group           nanoparticle region nanoparticle
+
+# --------------------
+# Potential
+# --------------------
 pair_style      eam/alloy
 pair_coeff      * * /home/wuwen/lammps/potentials/Cu_mishin1.eam.alloy Cu
 
+# --------------------
+# Fix substrate atoms to mimic rigid wall
+# --------------------
+velocity        substrate set 0.0 0.0 0.0
+fix             freeze substrate setforce 0.0 0.0 0.0
 
-# 设置原子质量（铜）
-mass            1 63.546
+# --------------------
+# Set initial velocity for nanoparticle (toward substrate)
+# --------------------
+velocity        nanoparticle set 0.0 0.0 -1000 units metal   # velocity ~1000 m/s downward
 
-# 创建墙体（下方刚性区域）
-region          wall block 0 10 0 10 0 2
-create_atoms    1 region wall
-group           wall_atoms region wall
-fix             freeze wall_atoms setforce 0.0 0.0 0.0
-
-# 创建投射粒子（上方）
-create_atoms    1 single 5 5 5
-group           projectile id 1001  # 假设它是第1001号原子
-velocity        projectile set 0.0 0.0 -1 units box
-
-# 设置时间步长与积分器
+# --------------------
+# Integration
+# --------------------
 timestep        0.001
-fix             int projectile nve
+fix             integrate nanoparticle nve
 
-# 热力学输出
+# Substrate is fixed, no integration needed for it (already frozen)
+
+# --------------------
+# Thermo and dump output
+# --------------------
 thermo          100
 thermo_style    custom step temp pe ke etotal
 
-# 轨迹输出（两个格式：LAMMPS 和 OVITO 都可用）
 dump            traj all custom 100 traj.lammpstrj id type x y z vx vy vz
-dump            gb all custom 100 dump.gb id type x y z vx vy vz
 
-# 运行模拟
-run             10000
+# --------------------
+# Run the simulation
+# --------------------
+run             20000
 
-# 保存最终状态
+# --------------------
+# Save final state
+# --------------------
 write_data      final.data
 write_restart   final.restart
