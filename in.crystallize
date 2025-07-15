@@ -1,0 +1,47 @@
+# 基本设置
+units           metal
+atom_style      atomic
+boundary        f f f
+
+# 构建模拟区域
+lattice         fcc 3.615
+region          box block 0 10 0 10 0 10
+create_box      1 box
+
+# 定义 EAM 势函数（使用 Cu_u3.eam）
+pair_style      eam/alloy
+pair_coeff      * * /home/wuwen/lammps/potentials/Cu_mishin1.eam.alloy Cu
+
+
+# 设置原子质量（铜）
+mass            1 63.546
+
+# 创建墙体（下方刚性区域）
+region          wall block 0 10 0 10 0 2
+create_atoms    1 region wall
+group           wall_atoms region wall
+fix             freeze wall_atoms setforce 0.0 0.0 0.0
+
+# 创建投射粒子（上方）
+create_atoms    1 single 5 5 5
+group           projectile id 1001  # 假设它是第1001号原子
+velocity        projectile set 0.0 0.0 -1 units box
+
+# 设置时间步长与积分器
+timestep        0.001
+fix             int projectile nve
+
+# 热力学输出
+thermo          100
+thermo_style    custom step temp pe ke etotal
+
+# 轨迹输出（两个格式：LAMMPS 和 OVITO 都可用）
+dump            traj all custom 100 traj.lammpstrj id type x y z vx vy vz
+dump            gb all custom 100 dump.gb id type x y z vx vy vz
+
+# 运行模拟
+run             10000
+
+# 保存最终状态
+write_data      final.data
+write_restart   final.restart
