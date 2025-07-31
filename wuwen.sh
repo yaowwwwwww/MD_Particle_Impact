@@ -2,12 +2,14 @@
 
 cd "$(dirname "$0")"
 
+export OMP_NUM_THREADS=80
 echo "Running LAMMPS bicrystal simulation..."
-./lmp -in in.crystallize
+# --- 关键修改：在这里指定 LAMMPS 可执行文件的完整路径 ---
+/home/wuwen/lammps/build/lmp -in in.impact
 
-if [ -f dump.gb ]; then
+if [ -f traj.lammpstrj ]; then
     echo "Opening result in OVITO..."
-    ovito dump.gb &
+    ovito traj.lammpstrj &
 else
-    echo "Error: dump.gb not found. Simulation may have failed."
+    echo "Error: results not found."
 fi

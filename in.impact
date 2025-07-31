@@ -1,5 +1,3 @@
-LAMMPS (2 Apr 2025 - Development - patch_2Apr2025-232-g440e24c60e)
-  using 80 OpenMP thread(s) per MPI task
 # -------------------- LAMMPS 输入脚本：高速粒子撞击（分子动力学尺度） --------------------
 # 模拟铝纳米粒子高速撞击平面铝衬底的过程。
 # !!! 此脚本已修改用于快速测试和调试，请注意原子数量已大幅减少。
@@ -14,48 +12,27 @@ boundary        p p f       # x 和 y 方向周期性边界条件（模拟无限
 # !!! 为快速测试而减小了尺寸 !!!
 variable particle_radius equal 10.0    # 粒子半径 (R)，单位埃格斯特朗 (1 纳米)
 variable particle_diameter equal ${particle_radius}*2.0 # 5 纳米
-variable particle_diameter equal 10*2.0 
 
 # 衬底尺寸基于粒子半径
 variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 2R = 50 埃 (5 纳米)
-variable substrate_half_width equal 10*5.0 
 variable substrate_height equal ${particle_radius}*5.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
-variable substrate_height equal 10*5.0     
 variable frozen_layer_height equal ${particle_radius}*1.0  # 冻结层高度 = 1R = 25 埃 (2.5 纳米)
-variable frozen_layer_height equal 10*1.0  
 
 # 粒子初始位置 (z 坐标的中心)
 # 粒子的底部表面将位于衬底的顶部表面。
 # 衬底顶部在 z = ${substrate_height}
 variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*0.1
-variable particle_center_z equal 50 + ${particle_radius} + ${particle_radius}*0.1
-variable particle_center_z equal 50 + 10 + ${particle_radius}*0.1
-variable particle_center_z equal 50 + 10 + 10*0.1
 
 # 模拟盒子：需要包含整个系统并允许形变。
 variable xlo equal -${substrate_half_width}
-variable xlo equal -50
 variable xhi equal ${substrate_half_width}
-variable xhi equal 50
 variable ylo equal -${substrate_half_width}
-variable ylo equal -50
 variable yhi equal ${substrate_half_width}
-variable yhi equal 50
 variable zlo equal 0.0
 variable zhi equal ${particle_center_z} + ${particle_radius}*1.5 # 1.5R 作为形变缓冲
-variable zhi equal 61 + ${particle_radius}*1.5 
-variable zhi equal 61 + 10*1.5 
 
 region sim_box block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
-region sim_box block -50 ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
-region sim_box block -50 50 ${ylo} ${yhi} ${zlo} ${zhi} units box
-region sim_box block -50 50 -50 ${yhi} ${zlo} ${zhi} units box
-region sim_box block -50 50 -50 50 ${zlo} ${zhi} units box
-region sim_box block -50 50 -50 50 0 ${zhi} units box
-region sim_box block -50 50 -50 50 0 76 units box
 create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底铝
-Created orthogonal box = (-50 -50 0) to (50 50 76)
-  1 by 1 by 1 MPI processor grid
 
 # 重要：为每种原子类型定义质量
 mass 1 26.9815386 # 类型 1 (粒子) 铝的原子质量，单位 amu
@@ -63,37 +40,19 @@ mass 2 26.9815386 # 类型 2 (衬底) 铝的原子质量，单位 amu
 
 # 3. 创建原子：衬底和粒子
 lattice fcc 4.05 # FCC 晶格，用于铝，晶格常数约 4.05 埃
-Lattice spacing in x,y,z = 4.05 4.05 4.05
 
 # 创建衬底原子 (类型 2: Al_substrate)
 region substrate_region block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${substrate_height} units box
-region substrate_region block -50 ${xhi} ${ylo} ${yhi} ${zlo} ${substrate_height} units box
-region substrate_region block -50 50 ${ylo} ${yhi} ${zlo} ${substrate_height} units box
-region substrate_region block -50 50 -50 ${yhi} ${zlo} ${substrate_height} units box
-region substrate_region block -50 50 -50 50 ${zlo} ${substrate_height} units box
-region substrate_region block -50 50 -50 50 0 ${substrate_height} units box
-region substrate_region block -50 50 -50 50 0 50 units box
 create_atoms 2 region substrate_region
-Created 30013 atoms
-  using lattice units in orthogonal box = (-50 -50 0) to (50 50 76)
-  create_atoms CPU = 0.016 seconds
 
 # 创建粒子原子 (类型 1: Al_particle)
 region particle_region sphere 0.0 0.0 ${particle_center_z} ${particle_radius} units box
-region particle_region sphere 0.0 0.0 61 ${particle_radius} units box
-region particle_region sphere 0.0 0.0 61 10 units box
 create_atoms 1 region particle_region
-Created 237 atoms
-  using lattice units in orthogonal box = (-50 -50 0) to (50 50 76)
-  create_atoms CPU = 0.002 seconds
 
 # 对原子进行分组，以便于操作
 group particle_group type 1    # 粒子组包含类型 1 的原子
-237 atoms in group particle_group
 group substrate_group type 2   # 衬底组包含类型 2 的原子
-30013 atoms in group substrate_group
 group mobile_atoms union particle_group substrate_group # 所有非冻结原子（粒子和衬底）
-30250 atoms in group mobile_atoms
 
 # 4. 初始速度
 # 为所有可移动原子设置初始温度 (例如 300K)
@@ -104,7 +63,6 @@ variable impact_vel equal -7.8 # 780 米/秒 = 7.8 埃/皮秒 (负值表示沿 -
 # !!! 新增：在施加撞击速度前，先移除粒子组的热速度，确保稳定性。
 velocity particle_group set 0.0 0.0 0.0 units box
 velocity particle_group set 0.0 0.0 ${impact_vel} units box
-velocity particle_group set 0.0 0.0 -7.8 units box
 
 # 确保衬底原子最初处于静止状态 (只保留来自 create 命令的热运动)
 # 如果不希望初始热运动，可以显式地将它们设置为 0。
@@ -125,13 +83,10 @@ pair_style hybrid/overlay eam lj/cut 2.5
 # EAM 势函数的参数设置
 # !!! 已更新为 /home/wuwen/lammps/potentials/Al_jnp.eam
 pair_coeff * * eam /home/wuwen/lammps/potentials/Al_jnp.eam
-Reading eam potential file /home/wuwen/lammps/potentials/Al_jnp.eam with DATE: 2007-06-11
 
 # LJ 势函数的参数设置
 # 这里使用您脚本开头定义的 lj_epsilon 和 lj_sigma 变量
 pair_coeff * * lj/cut ${lj_epsilon} ${lj_sigma}
-pair_coeff * * lj/cut 0.1 ${lj_sigma}
-pair_coeff * * lj/cut 0.1 2.5
 
 # 6. 模拟设置
 # !!! 已修改：时间步长减小到 0.00005 ps，以提高稳定性 !!!
@@ -143,14 +98,7 @@ fix 1 mobile_atoms nve # 对所有可移动原子使用 NVE 系综 (绝热撞击
 
 # 定义并冻结衬底的底部层
 region frozen_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -50 ${xhi} ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -50 50 ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -50 50 -50 ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -50 50 -50 50 ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -50 50 -50 50 0 ${frozen_layer_height} units box
-region frozen_layer block -50 50 -50 50 0 10 units box
 group frozen_atoms region frozen_layer
-6003 atoms in group frozen_atoms
 fix 2 frozen_atoms setforce 0.0 0.0 0.0 # 冻结这些原子的 x, y, z 方向力分量
 
 # 8. 输出和分析
@@ -171,32 +119,7 @@ dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz # 每 200 步
 # 9. 运行模拟
 # !!! 为了保持相同的总模拟时间 (20 ps) 而增加了总步数 !!!
 run 20000 # 运行 400,000 步 (400,000 步 * 0.00005 皮秒/步 = 20 皮秒)
-Neighbor list info ...
-  update: every = 1 steps, delay = 0 steps, check = yes
-  max neighbors/atom: 2000, page size: 100000
-  master list distance cutoff = 8
-  ghost atom cutoff = 8
-  binsize = 4, bins = 25 25 19
-  2 neighbor lists, perpetual/occasional/extra = 2 0 0
-  (1) pair eam, perpetual, skip from (2)
-      attributes: half, newton on
-      pair build: skip
-      stencil: none
-      bin: none
-  (2) pair lj/cut, perpetual
-      attributes: half, newton on
-      pair build: half/bin/atomonly/newton
-      stencil: half/bin/3d
-      bin: standard
-Per MPI rank memory allocation (min/avg/max) = 203.8 | 203.8 | 203.8 Mbytes
-   Step           Dt            Time           Temp          TotEng         KinEng         PotEng         Press          Volume        Density    
-         0   5e-05          0              302.73178     -99125.23       1183.6783     -100308.91     -26864.523      760000         1.7833434    
-       200   5e-05          0.01           272.9939      -99096.815      1067.4035     -100164.22     -25726.849      760000         1.7833434    
-       400   5e-05          0.02           202.86219     -99008.658      793.18915     -99801.847     -22973.794      760000         1.7833434    
-       600   5e-05          0.03           139.3048      -98851.925      544.68038     -99396.605     -19724.011      760000         1.7833434    
-       800   5e-05          0.04           121.89953     -98583.956      476.62597     -99060.582     -16245.165      760000         1.7833434    
-      1000   5e-05          0.05           147.5034      -98115.22       576.73683     -98691.957     -11649.353      760000         1.7833434    
-      1200   5e-05          0.06           181.53039     -97312.569      709.78203     -98022.351     -4169.2949      760000         1.7833434    
-      1400   5e-05          0.07           197.67806     -95942.662      772.91928     -96715.581      8614.8051      760000         1.7833434    
-ERROR: Lost atoms: original 30250 current 29677
-For more information see https://docs.lammps.org/err0008 (src/thermo.cpp:518)
+
+# 可选：写入重启文件
+write_restart restart.impact
+
