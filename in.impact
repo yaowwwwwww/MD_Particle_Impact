@@ -1,51 +1,48 @@
 # -------------------- LAMMPS 输入脚本：高速粒子撞击（分子动力学尺度） --------------------
-# 模拟铝纳米粒子高速撞击平面铝衬底的过程。
-# !!! 此脚本已修改用于快速测试和调试，请注意原子数量已大幅减少。
+# 模拟铝纳米粒子高速撞击平面fe衬底的过程。
 
 # 1. 初始化和系统设置
 units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、大气压 (atm) 等。
 atom_style      atomic      # 标准分子动力学模拟的原子样式
 dimension       3           # 3D 模拟
-boundary        p p f       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
+boundary        p p s       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
 
 # 2. 定义尺寸和变量（用于快速测试的纳米尺度）
-# !!! 为快速测试而减小了尺寸 !!!
-variable particle_radius equal 10.0    # 粒子半径 (R)，单位埃格斯特朗 (1 纳米)
+variable particle_radius equal 30.0    # 粒子半径 (R)，单位埃格斯特朗 (1 纳米)
 variable particle_diameter equal ${particle_radius}*2.0 # 5 纳米
 
 # 衬底尺寸基于粒子半径
 variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 2R = 50 埃 (5 纳米)
 variable substrate_height equal ${particle_radius}*5.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
-variable frozen_layer_height equal ${particle_radius}*1.0  # 冻结层高度 = 1R = 25 埃 (2.5 纳米)
+variable frozen_layer_height equal ${particle_radius}*5  # 冻结层高度 = 1R = 25 埃 (2.5 纳米)
 
 # 粒子初始位置 (z 坐标的中心)
 # 粒子的底部表面将位于衬底的顶部表面。
-# 衬底顶部在 z = ${substrate_height}
+# 衬底顶部在 z = ${substrate_height} 2.5 埃的初始距离
 variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*0.1
 
 # 模拟盒子：需要包含整个系统并允许形变。
 variable xlo equal -${substrate_half_width}
 variable xhi equal ${substrate_half_width}
-variable ylo equal -${substrate_half_width}
-variable yhi equal ${substrate_half_width}
+variable ylo equal -0.5
+variable yhi equal 0.5
 variable zlo equal 0.0
-variable zhi equal ${particle_center_z} + ${particle_radius}*1.5 # 1.5R 作为形变缓冲
+variable zhi equal ${particle_center_z} + ${particle_radius}*6 # 1.5R 作为形变缓冲
 
 region sim_box block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
-create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底铝
+create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底 钢（铁）
 
 # 重要：为每种原子类型定义质量
 mass 1 26.9815386 # 类型 1 (粒子) 铝的原子质量，单位 amu
-mass 2 26.9815386 # 类型 2 (衬底) 铝的原子质量，单位 amu
+mass 2 55.845    # 类型 2 (衬底) 钢（铁）的原子质量，单位 amu
 
-# 3. 创建原子：衬底和粒子
-lattice fcc 4.05 # FCC 晶格，用于铝，晶格常数约 4.05 埃
+# 3. 创建原子：衬底和粒子 
 
-# 创建衬底原子 (类型 2: Al_substrate)
+lattice bcc 2.866 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 region substrate_region block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${substrate_height} units box
 create_atoms 2 region substrate_region
 
-# 创建粒子原子 (类型 1: Al_particle)
+lattice fcc 4.05 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 region particle_region sphere 0.0 0.0 ${particle_center_z} ${particle_radius} units box
 create_atoms 1 region particle_region
 
@@ -59,7 +56,7 @@ group mobile_atoms union particle_group substrate_group # 所有非冻结原子�
 velocity mobile_atoms create 300.0 12345 dist gaussian
 
 # 给粒子组施加撞击速度
-variable impact_vel equal -7.8 # 780 米/秒 = 7.8 埃/皮秒 (负值表示沿 -z 方向)
+variable impact_vel equal -5 # 500 米/秒 = 5 埃/皮秒 (负值表示沿 -z 方向)
 # !!! 新增：在施加撞击速度前，先移除粒子组的热速度，确保稳定性。
 velocity particle_group set 0.0 0.0 0.0 units box
 velocity particle_group set 0.0 0.0 ${impact_vel} units box
@@ -68,29 +65,33 @@ velocity particle_group set 0.0 0.0 ${impact_vel} units box
 # 如果不希望初始热运动，可以显式地将它们设置为 0。
 # velocity substrate_group set 0.0 0.0 0.0 units box
 # 这将移除衬底的初始热速度。通常保留热运动更好。
+
 # 5. 原子间势函数 (Hybrid/Overlay)
 # 重新配置为 EAM + LJ 混合势
 
 # 定义 LJ 势的参数 (这些变量已经存在于您的脚本开头，这里是再次引用)
-variable lj_epsilon equal 0.1 # eV, 强度
+variable lj_epsilon equal 0 # eV, 强度
 variable lj_sigma equal 2.5   # Angstrom, 范围
-# variable lj_rcut equal ${lj_sigma}*1.122 # 2^(1/6)*sigma，LJ 势能的最小值
-
-# 使用 hybrid/overlay 结合 EAM 和 LJ 势
-# LJ 的截断半径在这里指定为 2.5 Angstrom
-pair_style hybrid/overlay eam lj/cut 2.5
+ 
+# 使用 hybrid/overlay 势能
+# lj/cut 2.5 表示 LJ 势的截断半径为 2.5 埃。
+pair_style hybrid/overlay eam/fs lj/cut 2.5
 
 # EAM 势函数的参数设置
-# !!! 已更新为 /home/wuwen/lammps/potentials/Al_jnp.eam
-pair_coeff * * eam /home/wuwen/lammps/potentials/Al_jnp.eam
+# pair_coeff 命令的顺序必须与 pair_style 中的势能类型顺序一致。
+# 这里的"*"表示所有原子，后面的"Al Fe"表示势能文件中的原子类型顺序。
+pair_coeff * * eam/fs /home/wuwen/lammps/potentials/AlFe_mm.eam.fs Al Fe
 
 # LJ 势函数的参数设置
-# 这里使用您脚本开头定义的 lj_epsilon 和 lj_sigma 变量
-pair_coeff * * lj/cut ${lj_epsilon} ${lj_sigma}
+# ！！！已修改：LJ势只作用于不同原子类型（Al-Fe）之间！！！
+# 对于同种原子对（Al-Al和Fe-Fe），将LJ势的epsilon参数设置为0，使其不起作用。
+pair_coeff 1 1 lj/cut 0.0 0.0  # Al-Al 之间没有 LJ 势
+pair_coeff 1 2 lj/cut ${lj_epsilon} ${lj_sigma} # Al-Fe 之间有 LJ 势
+pair_coeff 2 2 lj/cut 0.0 0.0  # Fe-Fe 之间没有 LJ 势
 
 # 6. 模拟设置
-# !!! 已修改：时间步长减小到 0.00005 ps，以提高稳定性 !!!
-timestep 0.00005        # 时间步长，单位皮秒。对于高速模拟和稳定性至关重要。
+# !!! 已修改：时间步长减小到 0.0001 ps，以提高稳定性 !!!
+timestep 0.0001        # 时间步长，单位皮秒。对于高速模拟和稳定性至关重要。
 comm_modify vel yes   # 确保速度被正确通信，以进行准确的力计算
 
 # 7. 积分和约束
