@@ -1,5 +1,9 @@
-LAMMPS (2 Apr 2025 - Development - patch_2Apr2025-232-g440e24c60e)
-  using 80 OpenMP thread(s) per MPI task
+LAMMPS (22 Jul 2025 - Development - patch_22Jul2025-72-g8b7fdf9ad3)
+KOKKOS mode with Kokkos version 4.6.2 is enabled
+  will use up to 1 GPU(s) per node
+  using 1 OpenMP thread(s) per MPI task
+package kokkos
+package kokkos cuda/aware on
 # -------------------- LAMMPS 输入脚本：高速粒子撞击（分子动力学尺度） --------------------
 # 模拟铝纳米粒子高速撞击平面fe衬底的过程。
 
@@ -14,21 +18,34 @@ variable particle_radius equal 30.0    # 粒子半径 (R)，单位埃格斯特�
 variable particle_diameter equal ${particle_radius}*2.0 # 5 纳米
 variable particle_diameter equal 30*2.0 
 
+
 # 衬底尺寸基于粒子半径
 variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 2R = 50 埃 (5 纳米)
 variable substrate_half_width equal 30*5.0 
-variable substrate_height equal ${particle_radius}*5.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
-variable substrate_height equal 30*5.0     
-variable frozen_layer_height equal ${particle_radius}*5  # 冻结层高度 = 1R = 25 埃 (2.5 纳米)
-variable frozen_layer_height equal 30*5  
+variable substrate_height equal ${particle_radius}*6.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
+WARNING: Detected non-ASCII characters in input. Will try to continue by replacing with ASCII equivalents where known. (src/input.cpp:478)
+variable substrate_height equal 30*6.0     
+variable frozen_layer_height equal ${particle_radius}*3  # 冻结层高度 = x *R = 
+variable frozen_layer_height equal 30*3  
+variable thermostat_layer_height equal ${particle_radius}*2 # 新增：恒温层厚度
+variable thermostat_layer_height equal 30*2 
+variable thermostat_upper_z equal ${frozen_layer_height}+${thermostat_layer_height} # 新增：恒温层上边界
+variable thermostat_upper_z equal 90+${thermostat_layer_height} 
+variable thermostat_upper_z equal 90+60 
+variable mobile_layer_upper_z equal ${substrate_height} # 新增：可移动层上边界
+variable mobile_layer_upper_z equal 180 
+# 定义衬底固定的中心点z坐标
+variable center_z equal ${frozen_layer_height}+0.1
+variable center_z equal 90+0.1
 
 # 粒子初始位置 (z 坐标的中心)
 # 粒子的底部表面将位于衬底的顶部表面。
 # 衬底顶部在 z = ${substrate_height} 2.5 埃的初始距离
-variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*0.1
-variable particle_center_z equal 150 + ${particle_radius} + ${particle_radius}*0.1
-variable particle_center_z equal 150 + 30 + ${particle_radius}*0.1
-variable particle_center_z equal 150 + 30 + 30*0.1
+variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*1
+variable particle_center_z equal 180 + ${particle_radius} + ${particle_radius}*1
+variable particle_center_z equal 180 + 30 + ${particle_radius}*1
+variable particle_center_z equal 180 + 30 + 30*1
+
 
 # 模拟盒子：需要包含整个系统并允许形变。
 variable xlo equal -${substrate_half_width}
@@ -38,9 +55,9 @@ variable xhi equal 150
 variable ylo equal -0.5
 variable yhi equal 0.5
 variable zlo equal 0.0
-variable zhi equal ${particle_center_z} + ${particle_radius}*6 # 1.5R 作为形变缓冲
-variable zhi equal 183 + ${particle_radius}*6 
-variable zhi equal 183 + 30*6 
+variable zhi equal ${particle_center_z} + ${particle_radius}*20 # 1.5R 作为形变缓冲
+variable zhi equal 240 + ${particle_radius}*20 
+variable zhi equal 240 + 30*20 
 
 region sim_box block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
 region sim_box block -150 ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
@@ -48,9 +65,9 @@ region sim_box block -150 150 ${ylo} ${yhi} ${zlo} ${zhi} units box
 region sim_box block -150 150 -0.5 ${yhi} ${zlo} ${zhi} units box
 region sim_box block -150 150 -0.5 0.5 ${zlo} ${zhi} units box
 region sim_box block -150 150 -0.5 0.5 0 ${zhi} units box
-region sim_box block -150 150 -0.5 0.5 0 363 units box
+region sim_box block -150 150 -0.5 0.5 0 840 units box
 create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底 钢（铁）
-Created orthogonal box = (-150 -0.5 0) to (150 0.5 363)
+Created orthogonal box = (-150 -0.5 0) to (150 0.5 840)
   1 by 1 by 1 MPI processor grid
 
 # 重要：为每种原子类型定义质量
@@ -67,29 +84,78 @@ region substrate_region block -150 150 ${ylo} ${yhi} ${zlo} ${substrate_height} 
 region substrate_region block -150 150 -0.5 ${yhi} ${zlo} ${substrate_height} units box
 region substrate_region block -150 150 -0.5 0.5 ${zlo} ${substrate_height} units box
 region substrate_region block -150 150 -0.5 0.5 0 ${substrate_height} units box
-region substrate_region block -150 150 -0.5 0.5 0 150 units box
+region substrate_region block -150 150 -0.5 0.5 0 180 units box
 create_atoms 2 region substrate_region
-Created 5565 atoms
-  using lattice units in orthogonal box = (-150 -0.5 -0.0363) to (150 0.5 363.0363)
-  create_atoms CPU = 0.009 seconds
+Created 6615 atoms
+  using lattice units in orthogonal box = (-150 -0.5 -0.084) to (150 0.5 840.084)
+  create_atoms CPU = 0.129 seconds
 
 lattice fcc 4.05 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 Lattice spacing in x,y,z = 4.05 4.05 4.05
 region particle_region sphere 0.0 0.0 ${particle_center_z} ${particle_radius} units box
-region particle_region sphere 0.0 0.0 183 ${particle_radius} units box
-region particle_region sphere 0.0 0.0 183 30 units box
+region particle_region sphere 0.0 0.0 240 ${particle_radius} units box
+region particle_region sphere 0.0 0.0 240 30 units box
 create_atoms 1 region particle_region
-Created 345 atoms
-  using lattice units in orthogonal box = (-150 -0.5 -0.0363) to (150 0.5 363.0363)
+Created 347 atoms
+  using lattice units in orthogonal box = (-150 -0.5 -0.084) to (150 0.5 840.084)
   create_atoms CPU = 0.001 seconds
 
 # 对原子进行分组，以便于操作
-group particle_group type 1    # 粒子组包含类型 1 的原子
-345 atoms in group particle_group
-group substrate_group type 2   # 衬底组包含类型 2 的原子
-5565 atoms in group substrate_group
-group mobile_atoms union particle_group substrate_group # 所有非冻结原子（粒子和衬底）
-5910 atoms in group mobile_atoms
+group particle_group type 1    # 粒子组包含类型 1 的原子
+347 atoms in group particle_group
+group substrate_group type 2   # 衬底组包含类型 2 的原子
+6615 atoms in group substrate_group
+
+# 定义并冻结衬底的底部层
+region frozen_layer block ${xlo} ${xhi} ${ylo} ${yhi} 0.0 ${frozen_layer_height} units box
+region frozen_layer block -150 ${xhi} ${ylo} ${yhi} 0.0 ${frozen_layer_height} units box
+region frozen_layer block -150 150 ${ylo} ${yhi} 0.0 ${frozen_layer_height} units box
+region frozen_layer block -150 150 -0.5 ${yhi} 0.0 ${frozen_layer_height} units box
+region frozen_layer block -150 150 -0.5 0.5 0.0 ${frozen_layer_height} units box
+region frozen_layer block -150 150 -0.5 0.5 0.0 90 units box
+group frozen_atoms region frozen_layer
+3360 atoms in group frozen_atoms
+
+# 定义恒温层（在冻结层之上）
+region thermostat_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${frozen_layer_height} ${thermostat_upper_z} units box
+region thermostat_layer block -150 ${xhi} ${ylo} ${yhi} ${frozen_layer_height} ${thermostat_upper_z} units box
+region thermostat_layer block -150 150 ${ylo} ${yhi} ${frozen_layer_height} ${thermostat_upper_z} units box
+region thermostat_layer block -150 150 -0.5 ${yhi} ${frozen_layer_height} ${thermostat_upper_z} units box
+region thermostat_layer block -150 150 -0.5 0.5 ${frozen_layer_height} ${thermostat_upper_z} units box
+region thermostat_layer block -150 150 -0.5 0.5 90 ${thermostat_upper_z} units box
+region thermostat_layer block -150 150 -0.5 0.5 90 150 units box
+group thermostat_atoms region thermostat_layer
+2205 atoms in group thermostat_atoms
+
+# 定义可移动层（在恒温层之上，不包含粒子）
+region mobile_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${thermostat_upper_z} ${mobile_layer_upper_z} units box
+region mobile_layer block -150 ${xhi} ${ylo} ${yhi} ${thermostat_upper_z} ${mobile_layer_upper_z} units box
+region mobile_layer block -150 150 ${ylo} ${yhi} ${thermostat_upper_z} ${mobile_layer_upper_z} units box
+region mobile_layer block -150 150 -0.5 ${yhi} ${thermostat_upper_z} ${mobile_layer_upper_z} units box
+region mobile_layer block -150 150 -0.5 0.5 ${thermostat_upper_z} ${mobile_layer_upper_z} units box
+region mobile_layer block -150 150 -0.5 0.5 150 ${mobile_layer_upper_z} units box
+region mobile_layer block -150 150 -0.5 0.5 150 180 units box
+group mobile_atoms region mobile_layer
+1050 atoms in group mobile_atoms
+
+# 将粒子组和可移动衬底组合成一个用于 NVE 的组
+group nve_atoms union particle_group mobile_atoms
+1397 atoms in group nve_atoms
+
+# 定义一个位于衬底中心的球形区域，用于固定
+# 半径 5.0 埃足以包含几个原子，起到锚定作用
+ region center_point sphere 0.0 0.0 ${center_z} 5.0 units box
+ region center_point sphere 0.0 0.0 90.1 5.0 units box
+ group center_atoms region center_point
+8 atoms in group center_atoms
+
+# 将中心点原子从可移动层、恒温层和NVE组中移除
+group mobile_atoms subtract mobile_atoms center_atoms
+1050 atoms in group mobile_atoms
+group thermostat_atoms subtract thermostat_atoms center_atoms
+2201 atoms in group thermostat_atoms
+group nve_atoms subtract nve_atoms center_atoms
+1397 atoms in group nve_atoms
 
 # 4. 初始速度
 # 为所有可移动原子设置初始温度 (例如 300K)
@@ -102,10 +168,6 @@ velocity particle_group set 0.0 0.0 0.0 units box
 velocity particle_group set 0.0 0.0 ${impact_vel} units box
 velocity particle_group set 0.0 0.0 -5 units box
 
-# 确保衬底原子最初处于静止状态 (只保留来自 create 命令的热运动)
-# 如果不希望初始热运动，可以显式地将它们设置为 0。
-# velocity substrate_group set 0.0 0.0 0.0 units box
-# 这将移除衬底的初始热速度。通常保留热运动更好。
 
 # 5. 原子间势函数 (Hybrid/Overlay)
 # 重新配置为 EAM + LJ 混合势
@@ -117,41 +179,6 @@ variable lj_sigma equal 2.5   # Angstrom, 范围
 # 使用 hybrid/overlay 势能
 # lj/cut 2.5 表示 LJ 势的截断半径为 2.5 埃。
 pair_style hybrid/overlay eam/fs lj/cut 2.5
-
-# EAM 势函数的参数设置
-# pair_coeff 命令的顺序必须与 pair_style 中的势能类型顺序一致。
-# 这里的"*"表示所有原子，后面的"Al Fe"表示势能文件中的原子类型顺序。
-pair_coeff * * eam/fs /home/wuwen/lammps/potentials/AlFe_mm.eam.fs Al Fe
-Reading eam/fs potential file /home/wuwen/lammps/potentials/AlFe_mm.eam.fs with DATE: 2007-06-11
-
-# LJ 势函数的参数设置
-# ！！！已修改：LJ势只作用于不同原子类型（Al-Fe）之间！！！
-# 对于同种原子对（Al-Al和Fe-Fe），将LJ势的epsilon参数设置为0，使其不起作用。
-pair_coeff 1 1 lj/cut 0.0 0.0  # Al-Al 之间没有 LJ 势
-pair_coeff 1 2 lj/cut ${lj_epsilon} ${lj_sigma} # Al-Fe 之间有 LJ 势
-pair_coeff 1 2 lj/cut 0 ${lj_sigma} 
-pair_coeff 1 2 lj/cut 0 2.5 
-pair_coeff 2 2 lj/cut 0.0 0.0  # Fe-Fe 之间没有 LJ 势
-
-# 6. 模拟设置
-# !!! 已修改：时间步长减小到 0.0001 ps，以提高稳定性 !!!
-timestep 0.0001        # 时间步长，单位皮秒。对于高速模拟和稳定性至关重要。
-comm_modify vel yes   # 确保速度被正确通信，以进行准确的力计算
-
-# 7. 积分和约束
-fix 1 mobile_atoms nve # 对所有可移动原子使用 NVE 系综 (绝热撞击不使用恒温器)
-
-# 定义并冻结衬底的底部层
-region frozen_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -150 ${xhi} ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -150 150 ${ylo} ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -150 150 -0.5 ${yhi} ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -150 150 -0.5 0.5 ${zlo} ${frozen_layer_height} units box
-region frozen_layer block -150 150 -0.5 0.5 0 ${frozen_layer_height} units box
-region frozen_layer block -150 150 -0.5 0.5 0 150 units box
-group frozen_atoms region frozen_layer
-5565 atoms in group frozen_atoms
-fix 2 frozen_atoms setforce 0.0 0.0 0.0 # 冻结这些原子的 x, y, z 方向力分量
-
-# 8. 输出和分析
-# 标准热力学�
+ERROR: Unrecognized pair style 'eam/fs' is part of the MANYBODY package which is not enabled in this LAMMPS binary.
+For more information see https://docs.lammps.org/err0010 (src/force.cpp:275)
+Last input line: pair_style hybrid/overlay eam/fs lj/cut 2.5
