@@ -2,7 +2,7 @@
 # 模拟铝纳米粒子高速撞击平面fe衬底的过程。
 
 # 1. 初始化和系统设置
-units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、大气压 (atm) 等。
+units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、大气压 (atm) 。
 atom_style      atomic      # 标准分子动力学模拟的原子样式
 dimension       3           # 3D 模拟
 boundary        p p s       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
@@ -94,16 +94,12 @@ variable lj_sigma equal 2.5   # Angstrom, 范围
 pair_style hybrid/overlay eam/fs lj/cut 2.5
 
 # EAM 势函数的参数设置
-# pair_coeff 命令的顺序必须与 pair_style 中的势能类型顺序一致。
 # 这里的"*"表示所有原子，后面的"Al Fe"表示势能文件中的原子类型顺序。
 pair_coeff * * eam/fs /home/wuwen123/comp/yao/lammps/potentials/AlFe_mm.eam.fs Al Fe
 
 # LJ 势函数的参数设置
-# ！！！已修改：LJ势只作用于不同原子类型（Al-Fe）之间！！！
-# 对于同种原子对（Al-Al和Fe-Fe），将LJ势的epsilon参数设置为0，使其不起作用。
-pair_coeff 1 1 lj/cut 0.0 0.0  # Al-Al 之间没有 LJ 势
-pair_coeff 1 2 lj/cut ${lj_epsilon} ${lj_sigma} # Al-Fe 之间有 LJ 势
-pair_coeff 2 2 lj/cut 0.0 0.0  # Fe-Fe 之间没有 LJ 势
+
+#pair_coeff 1 2 lj/cut ${lj_epsilon} ${lj_sigma} # Al-Fe 之间有 LJ 势
 
 # 6. 模拟设置
 # !!! 已修改：时间步长减小到 0.0001 ps，以提高稳定性 !!!
@@ -132,9 +128,10 @@ dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz # 每 200 步
 # NPT 阶段的 fix 命令
 
 fix 1 mobile_atoms nvt temp 300.0 300.0 100.0
-fix 2 frozen_atoms setforce 0.0 0.0 0.0
+
 velocity particle_group set 0.0 0.0 0.0 units box
-fix 3 particle_group setforce 0.0 0.0 0.0   # 冻结粒子，不参与平衡
+
+neigh_modify exclude type 1 2
 # 运行 50,000 步进行平衡
 timestep 0.001      # 1 fs
 run 10000           # 50 ps
@@ -142,12 +139,13 @@ run 10000           # 50 ps
 unfix 1
 # --------------------------------------------------------
 
-
+neigh_modify exclude none
 # -------------------- 阶段 2: NVE 撞击模拟 --------------------
 velocity nve_atoms set 0.0 0.0 0.0 units box
 unfix 3  # 确保粒子组被释放（如果忘了在阶段 1 解除，这里也解）
 velocity particle_group set 0.0 0.0 ${impact_vel} units box
-
+fix 3 particle_group setforce 0.0 0.0 0.0   # 冻结粒子，不参与平衡
+fix 2 frozen_atoms setforce 0.0 0.0 0.0
 fix 4 nve_atoms nve
 # 保留 fix 2 冻结底层，不需要重复 fix 5
 fix 5 thermostat_atoms nvt temp 300.0 300.0 100.0 
