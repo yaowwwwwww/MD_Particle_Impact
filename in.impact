@@ -1,4 +1,4 @@
-# -------------------- LAMMPS 输入脚本：高速粒子撞击（分子动力学尺度） --------------------
+# -------------------- 高速粒子撞击 --------------------
 # 模拟铝纳米粒子高速撞击平面fe衬底的过程。
 
 # 1. 初始化和系统设置
@@ -15,8 +15,8 @@ variable particle_diameter equal ${particle_radius}*2.0 # 5 纳米
 # 衬底尺寸基于粒子半径
 variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 2R = 50 埃 (5 纳米)
 variable substrate_height equal ${particle_radius}*6.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
-variable frozen_layer_height equal ${particle_radius}*3  # 冻结层高度 = x *R = 
-variable thermostat_layer_height equal ${particle_radius}*2 # 新增：恒温层厚度
+variable frozen_layer_height equal ${particle_radius}*2  # 冻结层高度 = x *R = 
+variable thermostat_layer_height equal ${particle_radius}*1 # 新增：恒温层厚度
 variable thermostat_upper_z equal ${frozen_layer_height}+${thermostat_layer_height} # 新增：恒温层上边界
 variable mobile_layer_upper_z equal ${substrate_height} # 新增：可移动层上边界
 # 定义衬底固定的中心点z坐标
@@ -72,15 +72,7 @@ group mobile_atoms region mobile_layer
 # 将粒子组和可移动衬底组合成一个用于 NVE 的组
 group nve_atoms union particle_group mobile_atoms
 
-# 定义一个位于衬底中心的球形区域，用于固定
-# 半径 5.0 埃足以包含几个原子，起到锚定作用
- region center_point sphere 0.0 0.0 ${center_z} 5.0 units box
- group center_atoms region center_point
 
-# 将中心点原子从可移动层、恒温层和NVE组中移除
-group mobile_atoms subtract mobile_atoms center_atoms
-group thermostat_atoms subtract thermostat_atoms center_atoms
-group nve_atoms subtract nve_atoms center_atoms
 
 # 4. 初始速度
 # 为所有可移动原子设置初始温度 (例如 300K)
@@ -88,10 +80,7 @@ velocity mobile_atoms create 300.0 12345 dist gaussian
 
 # 给粒子组施加撞击速度
 variable impact_vel equal -5 # 500 米/秒 = 5 埃/皮秒 (负值表示沿 -z 方向)
-# !!! 新增：在施加撞击速度前，先移除粒子组的热速度，确保稳定性。
-velocity particle_group set 0.0 0.0 0.0 units box
-velocity particle_group set 0.0 0.0 ${impact_vel} units box
- 
+
 
 # 5. 原子间势函数 (Hybrid/Overlay)
 # 重新配置为 EAM + LJ 混合势
@@ -107,7 +96,7 @@ pair_style hybrid/overlay eam/fs lj/cut 2.5
 # EAM 势函数的参数设置
 # pair_coeff 命令的顺序必须与 pair_style 中的势能类型顺序一致。
 # 这里的"*"表示所有原子，后面的"Al Fe"表示势能文件中的原子类型顺序。
-pair_coeff * * eam/fs /home/wuwen/lammps/potentials/AlFe_mm.eam.fs Al Fe
+pair_coeff * * eam/fs /home/wuwen123/comp/yao/lammps/potentials/AlFe_mm.eam.fs Al Fe
 
 # LJ 势函数的参数设置
 # ！！！已修改：LJ势只作用于不同原子类型（Al-Fe）之间！！！
@@ -138,53 +127,38 @@ dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz # 每 200 步
 
 
 # -------------------- 阶段 1: NPT 平衡 --------------------
-# 平衡前的准备：只对衬底的可移动部分创建初始速度
-# -velocity mobile_atoms create 300.0 12345 dist gaussian
-#velocity thermostat_atoms create 300.0 12345 dist gaussian
-# -velocity particle_group set 0.0 0.0 0.0 # 粒子在平衡阶段不应该有速度
+
 
 # NPT 阶段的 fix 命令
-# 使用 fix 1 进行 NPT 平衡，将整个系统保持在 300K 和 0 压强
-# -fix 1 mobile_atoms npt temp 300.0 300.0 100.0 x 0.0 0.0 1000.0 y 0.0 0.0 1000.0
-# -fix 2 frozen_atoms setforce 0.0 0.0 0.0
-fix 3 center_atoms setforce 0.0 0.0 0.0
-# 这里我们对恒温层使用 NVT，因为我们希望在撞击过程中维持其温度，而不是压强。
-# 但为了平衡，我们也可以先对它进行 NPT，不过只对 mobile_atoms 进行 NPT 也是一个合理的选择。
-# 让我们先对mobile_atoms进行NPT，同时对恒温层进行NVT来平衡温度。
-fix 8 thermostat_atoms nvt temp 300.0 300.0 100.0
 
-# 运行 10,000 步进行平衡
-run 10000
-
+fix 1 mobile_atoms nvt temp 300.0 300.0 100.0
+fix 2 frozen_atoms setforce 0.0 0.0 0.0
+velocity particle_group set 0.0 0.0 0.0 units box
+fix 3 particle_group setforce 0.0 0.0 0.0   # 冻结粒子，不参与平衡
+# 运行 50,000 步进行平衡
+timestep 0.001      # 1 fs
+run 10000           # 50 ps
 # 平衡结束后，移除 NPT 约束
 unfix 1
-unfix 2
-unfix 3
-unfix 8
 # --------------------------------------------------------
 
 
 # -------------------- 阶段 2: NVE 撞击模拟 --------------------
-
-# 撞击前的准备
-# 重置粒子和衬底可移动部分的速度为 0，然后施加撞击速度
 velocity nve_atoms set 0.0 0.0 0.0 units box
+unfix 3  # 确保粒子组被释放（如果忘了在阶段 1 解除，这里也解）
 velocity particle_group set 0.0 0.0 ${impact_vel} units box
 
-# 撞击阶段的 fix 命令
 fix 4 nve_atoms nve
-fix 5 frozen_atoms setforce 0.0 0.0 0.0
-fix 6 thermostat_atoms nvt temp 300.0 300.0 100.0
-fix 7 center_atoms setforce 0.0 0.0 0.0 # 冻结中心点原子，防止漂移
+# 保留 fix 2 冻结底层，不需要重复 fix 5
+fix 5 thermostat_atoms nvt temp 300.0 300.0 100.0 
 
-# 运行撞击模拟
-run 50000
+timestep 0.0001  # 0.1 fs
+run 50000        # 5 ps 撞击过程
 
-# 撞击结束后，移除所有 fix
+# 撞击结束后，移除相关 fix
 unfix 4
 unfix 5
-unfix 6
-unfix 7
+
 # --------------------------------------------------------
 
 
