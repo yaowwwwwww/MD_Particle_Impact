@@ -2,39 +2,36 @@
 # 模拟铝纳米粒子高速撞击平面fe衬底的过程。
 
 # 1. 初始化和系统设置
-units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、大气压 (atm) 。
+units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、bar 。
 atom_style      atomic      # 标准分子动力学模拟的原子样式
 dimension       3           # 3D 模拟
-boundary        p p s       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
+boundary        p p f       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
 
 # 2. 定义尺寸和变量（用于快速测试的纳米尺度）
-variable particle_radius equal 30.0    # 粒子半径 (R)，单位埃格斯特朗 (1 纳米)
-variable particle_diameter equal ${particle_radius}*2.0 # 5 纳米
+variable particle_radius equal 10.0    # 粒子半径 (R)，单位埃格斯特朗 (3 纳米)
+variable particle_diameter equal ${particle_radius}*2.0 # 30 Å *2=6纳米
 
  
 # 衬底尺寸基于粒子半径
-variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 2R = 50 埃 (5 纳米)
-variable substrate_height equal ${particle_radius}*6.0     # 衬底高度 (H) = 2R = 50 埃 (5 纳米)
-variable frozen_layer_height equal ${particle_radius}*2  # 冻结层高度 = x *R = 
-variable thermostat_layer_height equal ${particle_radius}*1 # 新增：恒温层厚度
+variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 5R = 150 埃 (15 纳米)
+variable substrate_height equal ${particle_radius}*6.0     # 衬底高度 (H) = 6R = 180 埃 (18 纳米)
+variable frozen_layer_height equal ${particle_radius}*2  # 冻结层高度 = 2r = 60 埃 (6 纳米)
+variable thermostat_layer_height equal ${particle_radius}*1 # 恒温层厚度30埃 (3 纳米)
 variable thermostat_upper_z equal ${frozen_layer_height}+${thermostat_layer_height} # 新增：恒温层上边界
-variable mobile_layer_upper_z equal ${substrate_height} # 新增：可移动层上边界
-# 定义衬底固定的中心点z坐标
-variable center_z equal ${frozen_layer_height}+0.1
+variable mobile_layer_upper_z equal ${substrate_height} # 可移动层上边界180-60-30=90
+
 
 # 粒子初始位置 (z 坐标的中心)
-# 粒子的底部表面将位于衬底的顶部表面。
-# 衬底顶部在 z = ${substrate_height} 2.5 埃的初始距离
 variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*1
 
 
 # 模拟盒子：需要包含整个系统并允许形变。
 variable xlo equal -${substrate_half_width}
 variable xhi equal ${substrate_half_width}
-variable ylo equal -0.5
-variable yhi equal 0.5
+variable ylo equal -20*2.866
+variable yhi equal 20*2.866
 variable zlo equal 0.0
-variable zhi equal ${particle_center_z} + ${particle_radius}*20 # 1.5R 作为形变缓冲
+variable zhi equal ${particle_center_z} + ${particle_radius}*5 # 1.5R 作为形变缓冲
 
 region sim_box block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
 create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底 钢（铁）
@@ -43,12 +40,13 @@ create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 
 mass 1 26.9815386 # 类型 1 (粒子) 铝的原子质量，单位 amu
 mass 2 55.845    # 类型 2 (衬底) 钢（铁）的原子质量，单位 amu
 
-# 3. 创建原子：衬底和粒子 
+# 3. 创建衬底  
 
 lattice bcc 2.866 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 region substrate_region block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${substrate_height} units box
 create_atoms 2 region substrate_region
 
+# 创建粒子 
 lattice fcc 4.05 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
 region particle_region sphere 0.0 0.0 ${particle_center_z} ${particle_radius} units box
 create_atoms 1 region particle_region
@@ -76,89 +74,36 @@ group nve_atoms union particle_group mobile_atoms
 
 # 4. 初始速度
 # 为所有可移动原子设置初始温度 (例如 300K)
-velocity mobile_atoms create 300.0 12345 dist gaussian
+velocity mobile_atoms create 300.0 12345 mom yes rot yes dist gaussian
 
-# 给粒子组施加撞击速度
+# 撞击速度变量
 variable impact_vel equal -5 # 500 米/秒 = 5 埃/皮秒 (负值表示沿 -z 方向)
 
 
 # 5. 原子间势函数 (Hybrid/Overlay)
-# 重新配置为 EAM + LJ 混合势
-
-# 定义 LJ 势的参数 (这些变量已经存在于您的脚本开头，这里是再次引用)
-variable lj_epsilon equal 0 # eV, 强度
-variable lj_sigma equal 2.5   # Angstrom, 范围
- 
-# 使用 hybrid/overlay 势能
-# lj/cut 2.5 表示 LJ 势的截断半径为 2.5 埃。
-pair_style hybrid/overlay eam/fs lj/cut 2.5
-
-# EAM 势函数的参数设置
-# 这里的"*"表示所有原子，后面的"Al Fe"表示势能文件中的原子类型顺序。
+pair_style hybrid/overlay eam/fs  lj/cut 10 
 pair_coeff * * eam/fs /home/wuwen123/comp/yao/lammps/potentials/AlFe_mm.eam.fs Al Fe
+pair_coeff 1 2 lj/cut 0.0000001 10
+  
+velocity particle_group set 0.0 0.0 ${impact_vel} sum yes units box
 
-# LJ 势函数的参数设置
+# 冻结底层
+fix 1 frozen_atoms setforce 0.0 0.0 0.0
+velocity frozen_atoms set 0 0 0
+# 恒温层控温（300K）
+fix 2 thermostat_atoms nvt temp 300.0 300.0 0.1
 
-#pair_coeff 1 2 lj/cut ${lj_epsilon} ${lj_sigma} # Al-Fe 之间有 LJ 势
+# 粒子和可移动衬底 NVE 积分
+fix 3 nve_atoms nve
 
-# 6. 模拟设置
-# !!! 已修改：时间步长减小到 0.0001 ps，以提高稳定性 !!!
-timestep 0.0001        # 时间步长，单位皮秒。对于高速模拟和稳定性至关重要。
-comm_modify vel yes   # 确保速度被正确通信，以进行准确的力计算
+# ----------- 输出和转储 ------------
+thermo_style custom step time temp pe ke etotal press
+thermo 200
 
-# 8. 输出和分析
-# 标准热力学输出
-compute KE_all all ke     # 计算所有原子的动能
-compute PE_all all pe     # 计算所有原子的势能
-# 总能量 (etotal) 将由 thermo_style 直接计算和输出
+dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz
 
-# !!! 为保持相同的模拟时间间隔而更新了输出频率 !!!
-thermo_style custom step dt time temp etotal ke pe press vol density # 定义热力学输出样式
-thermo 200 # 每 200 步输出一次热力学数据
-
-# 转储原子位置用于可视化 (e.g., OVITO)
-# !!! 为保持相同的模拟时间间隔而更新了输出频率 !!!
-dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz # 每 200 步转储一次原子数据
-# dump_modify 1 image full center yes box yes adiam 1.5 # dump 修改：输出完整图像，居中，显示盒子，原子放大 1.5 倍以便更好可视化
-
-
-# -------------------- 阶段 1: NPT 平衡 --------------------
-
-
-# NPT 阶段的 fix 命令
-
-fix 1 mobile_atoms nvt temp 300.0 300.0 100.0
-
-velocity particle_group set 0.0 0.0 0.0 units box
-
-neigh_modify exclude type 1 2
-# 运行 50,000 步进行平衡
-timestep 0.001      # 1 fs
-run 10000           # 50 ps
-# 平衡结束后，移除 NPT 约束
-unfix 1
-# --------------------------------------------------------
-
-neigh_modify exclude none
-# -------------------- 阶段 2: NVE 撞击模拟 --------------------
-velocity nve_atoms set 0.0 0.0 0.0 units box
-unfix 3  # 确保粒子组被释放（如果忘了在阶段 1 解除，这里也解）
-velocity particle_group set 0.0 0.0 ${impact_vel} units box
-fix 3 particle_group setforce 0.0 0.0 0.0   # 冻结粒子，不参与平衡
-fix 2 frozen_atoms setforce 0.0 0.0 0.0
-fix 4 nve_atoms nve
-# 保留 fix 2 冻结底层，不需要重复 fix 5
-fix 5 thermostat_atoms nvt temp 300.0 300.0 100.0 
-
+# ----------- 运行模拟 ------------
 timestep 0.0001  # 0.1 fs
-run 50000        # 5 ps 撞击过程
+run 100000        # 5 ps
 
-# 撞击结束后，移除相关 fix
-unfix 4
-unfix 5
-
-# --------------------------------------------------------
-
-
-# 9. 可选：写入重启文件
 write_restart restart.impact
