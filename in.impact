@@ -1,109 +1,79 @@
-# -------------------- 高速粒子撞击 --------------------
-# 模拟铝纳米粒子高速撞击平面fe衬底的过程。
+# -------------------- 高速粒子撞击（由 Atomsk 预构建几何） --------------------
+# 几何来自：impact_AlCu.lmp（Al 衬底 + Cu 球）
 
 # 1. 初始化和系统设置
-units           metal       # 单位制：埃格斯特朗 (A)、皮秒 (ps)、电子伏 (eV)、开尔文 (K)、bar 。
-atom_style      atomic      # 标准分子动力学模拟的原子样式
-dimension       3           # 3D 模拟
-boundary        p p f       # x 和 y 方向周期性边界条件（模拟无限平面），z 方向固定（非周期性）
+units           metal
+atom_style      atomic
+dimension       3
+boundary        p p f       # x/y 周期，z 非周期（固定盒）
 
-# 2. 定义尺寸和变量（用于快速测试的纳米尺度）
-variable particle_radius equal 10.0    # 粒子半径 (R)，单位埃格斯特朗 (3 纳米)
-variable particle_diameter equal ${particle_radius}*2.0 # 30 Å *2=6纳米
+# 2. 读取 Atomsk 生成的数据文件
+read_data       impact_AlCu.lmp
 
- 
-# 衬底尺寸基于粒子半径
-variable substrate_half_width equal ${particle_radius}*5.0 # 衬底半宽 (L) = 5R = 150 埃 (15 纳米)
-variable substrate_height equal ${particle_radius}*6.0     # 衬底高度 (H) = 6R = 180 埃 (18 纳米)
-variable frozen_layer_height equal ${particle_radius}*2  # 冻结层高度 = 2r = 60 埃 (6 纳米)
-variable thermostat_layer_height equal ${particle_radius}*1 # 恒温层厚度30埃 (3 纳米)
-variable thermostat_upper_z equal ${frozen_layer_height}+${thermostat_layer_height} # 新增：恒温层上边界
-variable mobile_layer_upper_z equal ${substrate_height} # 可移动层上边界180-60-30=90
+# ===== 如果需要，可检查 Masses 是否在数据文件里；若已包含，可删除下面两行 =====
+# mass 1 26.9815386         # Al
+# mass 2 63.546             # Cu
 
+# 3. 分组（按类型号；若你的 .lmp 中类型号相反，请互换 1/2）
+group substrate_group type 1   # 假定 1=Al（衬底）
+group particle_group  type 2   # 假定 2=Cu（粒子）
 
-# 粒子初始位置 (z 坐标的中心)
-variable particle_center_z equal ${substrate_height} + ${particle_radius} + ${particle_radius}*1
+# 3.1 依据衬底实际厚度划分冻结/恒温/可动层（自动从几何计算）
+compute zmax_sub substrate_group reduce max z
+compute zmin_sub substrate_group reduce min z
+run 0                         # 初始化计算以获得 c_* 值
+variable zmin equal c_zmin_sub
+variable zmax equal c_zmax_sub
 
+# 你可按需要调整以下厚度（Å）
+variable frozen_layer_height     equal 40.0     # 冻结层厚度
+variable thermostat_layer_height equal 20.0     # 恒温层厚度
+variable thermostat_upper_z      equal ${zmin}+${frozen_layer_height}
+variable mobile_layer_upper_z    equal ${zmax}
 
-# 模拟盒子：需要包含整个系统并允许形变。
-variable xlo equal -${substrate_half_width}
-variable xhi equal ${substrate_half_width}
-variable ylo equal -20*2.866
-variable yhi equal 20*2.866
-variable zlo equal 0.0
-variable zhi equal ${particle_center_z} + ${particle_radius}*5 # 1.5R 作为形变缓冲
+# 区域与分组
+region frozen_layer     block INF INF INF INF ${zmin} ${thermostat_upper_z}     units box
+region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \
+                                  ${thermostat_upper_z}+${thermostat_layer_height} units box
+region mobile_layer     block INF INF INF INF ${thermostat_upper_z}+${thermostat_layer_height} \
+                                  ${mobile_layer_upper_z} units box
 
-region sim_box block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${zhi} units box
-create_box 2 sim_box # 创建包含 2 种原子类型的模拟盒子：类型 1 用于粒子铝，类型 2 用于衬底 钢（铁）
+group  frozen_atoms     region frozen_layer
+group  thermostat_atoms region thermostat_layer
+group  mobile_atoms     region mobile_layer
 
-# 重要：为每种原子类型定义质量
-mass 1 26.9815386 # 类型 1 (粒子) 铝的原子质量，单位 amu
-mass 2 55.845    # 类型 2 (衬底) 钢（铁）的原子质量，单位 amu
+# 整体 NVE 积分组 = 粒子(Cu) + 可动衬底
+group  nve_atoms union particle_group mobile_atoms
 
-# 3. 创建衬底  
-
-lattice bcc 2.866 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
-region substrate_region block ${xlo} ${xhi} ${ylo} ${yhi} ${zlo} ${substrate_height} units box
-create_atoms 2 region substrate_region
-
-# 创建粒子 
-lattice fcc 4.05 orient x 1 0 0 orient y 0 1 0 orient z 0 0 1
-region particle_region sphere 0.0 0.0 ${particle_center_z} ${particle_radius} units box
-create_atoms 1 region particle_region
-
-# 对原子进行分组，以便于操作
-group particle_group type 1    # 粒子组包含类型 1 的原子
-group substrate_group type 2   # 衬底组包含类型 2 的原子
-
-# 定义并冻结衬底的底部层
-region frozen_layer block ${xlo} ${xhi} ${ylo} ${yhi} 0.0 ${frozen_layer_height} units box
-group frozen_atoms region frozen_layer
-
-# 定义恒温层（在冻结层之上）
-region thermostat_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${frozen_layer_height} ${thermostat_upper_z} units box
-group thermostat_atoms region thermostat_layer
-
-# 定义可移动层（在恒温层之上，不包含粒子）
-region mobile_layer block ${xlo} ${xhi} ${ylo} ${yhi} ${thermostat_upper_z} ${mobile_layer_upper_z} units box
-group mobile_atoms region mobile_layer
-
-# 将粒子组和可移动衬底组合成一个用于 NVE 的组
-group nve_atoms union particle_group mobile_atoms
-
-
-
-# 4. 初始速度
-# 为所有可移动原子设置初始温度 (例如 300K)
-velocity mobile_atoms create 300.0 12345 mom yes rot yes dist gaussian
-
-# 撞击速度变量
-variable impact_vel equal -5 # 500 米/秒 = 5 埃/皮秒 (负值表示沿 -z 方向)
-
-
-# 5. 原子间势函数 (Hybrid/Overlay)
-pair_style hybrid/overlay eam/fs  lj/cut 10 
-pair_coeff * * eam/fs /home/wuwen123/comp/yao/lammps/potentials/AlFe_mm.eam.fs Al Fe
-pair_coeff 1 2 lj/cut 0.0000001 10
-  
+# 4. 初始温度与撞击速度
+velocity mobile_atoms   create 300.0 12345 mom yes rot yes dist gaussian
+variable impact_vel     equal -5.0                 # 5 Å/ps ≈ 500 m/s，沿 -z
 velocity particle_group set 0.0 0.0 ${impact_vel} sum yes units box
 
-# 冻结底层
-fix 1 frozen_atoms setforce 0.0 0.0 0.0
-velocity frozen_atoms set 0 0 0
-# 恒温层控温（300K）
+# 5. 势函数（建议使用含 Al&Cu 的 EAM/alloy 势）
+pair_style eam/alloy
+# 替换成你本机的势文件路径；元素映射顺序要与类型一致（1=Al, 2=Cu）
+variable POTFILE string /path/to/AlCu.eam.alloy
+pair_coeff * * ${POTFILE} Al Cu
+
+# 若暂时找不到 Al-Cu 合金势，可以临时用 hybrid/overlay + lj/cut 给跨项做占位（不建议长期使用）
+# pair_style hybrid/overlay eam/alloy lj/cut 10
+# pair_coeff * * eam/alloy ${POTFILE} Al Cu
+# pair_coeff 1 2 lj/cut 0.0000001 10
+
+# 6. 约束与积分
+fix 1 frozen_atoms     setforce 0.0 0.0 0.0
+velocity frozen_atoms  set 0 0 0
 fix 2 thermostat_atoms nvt temp 300.0 300.0 0.1
+fix 3 nve_atoms        nve
 
-# 粒子和可移动衬底 NVE 积分
-fix 3 nve_atoms nve
-
-# ----------- 输出和转储 ------------
+# 7. 输出
 thermo_style custom step time temp pe ke etotal press
 thermo 200
-
 dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz
 
-# ----------- 运行模拟 ------------
-timestep 0.0001  # 0.1 fs
-run 100000        # 5 p1s
+# 8. 运行
+timestep 0.0001    # 0.1 fs
+run 100000         # 10 ps
 
 write_restart restart.impact
