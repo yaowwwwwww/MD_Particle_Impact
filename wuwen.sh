@@ -4,23 +4,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# ===== 并行参数（可用环境变量覆盖）=====
+# ===== parallel agri=====
 NP="${NP:-40}"                          # MPI ranks，默认40
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"   # 每rank线程数，默认1（CPU跑就设>1）
 
-# ===== 寻找 atomsk 可执行文件 =====
-ATOMSK_BIN="${ATOMSK_BIN:-atomsk}"
-if ! command -v "$ATOMSK_BIN" &>/dev/null; then
-  for p in "$HOME/Downloads/atomsk_b0.13.1_Linux-amd64/atomsk" \
-           "$HOME/Downloads/atomsk/atomsk"; do
-    [[ -x "$p" ]] && ATOMSK_BIN="$p" && break
-  done
-fi
-command -v "$ATOMSK_BIN" >/dev/null || { echo "ERROR: atomsk 未找到（可用 ATOMSK_BIN 指定路径）"; exit 1; }
+# ===== atomsk  =====
+ATOMSK_BIN="/home/wuwen/Downloads/atomsk_b0.13.1_Linux-amd64/atomsk"
 
-echo "== 1) Atomsk 建模：Al 衬底 + Cu 球 =="
+ 
 
-# ====== 可调参数（Å）======
+echo "== 1) Atomsk model ：Al substrate + Cu sphere =="
+
+# ====== parameters（Å）======
 a_Al=4.05        # fcc Al
 a_Cu=3.615       # fcc Cu
 NX=40; NY=40; NZ_SUB=20          # 衬底尺寸（晶胞数）
@@ -62,10 +57,10 @@ EOF
   -wrap \
   cu_sphere.cfg
 
-# 合并并导出 LAMMPS 数据（类型通常为 1=Al, 2=Cu）
+# export LAMMPS data（ 1=Al, 2=Cu）
 "$ATOMSK_BIN" --merge 2 al_substrate.cfg cu_sphere.cfg impact_AlCu.cfg lammps
-[[ -f impact_AlCu.lmp ]] || { echo "ERROR: impact_AlCu.lmp 生成失败"; exit 1; }
-echo ">> 生成完成：impact_AlCu.lmp"
+[[ -f impact_AlCu.lmp ]] || { echo "ERROR: impact_AlCu.lmp  failed."; exit 1; }
+echo ">> model established:impact_AlCu.lmp"
 
 # ===== 运行 LAMMPS =====
 echo "== 2) Running LAMMPS: ${NP} MPI ranks × ${OMP_NUM_THREADS} OMP threads = $((NP*OMP_NUM_THREADS)) 并行 =="

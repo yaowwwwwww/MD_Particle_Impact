@@ -1,0 +1,86 @@
+LAMMPS (2 Apr 2025 - Development - patch_2Apr2025-232-g440e24c60e)
+  using 1 OpenMP thread(s) per MPI task
+# -------------------- 高速粒子撞击（由 Atomsk 预构建几何） --------------------
+# 几何来自：impact_AlCu.lmp（Al 衬底 + Cu 球）
+
+# 1. 初始化和系统设置
+units           metal
+atom_style      atomic
+dimension       3
+boundary        p p f       # x/y 周期，z 非周期（固定盒）
+
+# 2. 读取 Atomsk 生成的数据文件
+read_data       impact_AlCu.lmp
+Reading data file ...
+  orthogonal box = (0 0 0) to (162 162 150)
+  4 by 5 by 2 MPI processor grid
+  reading atoms ...
+  130899 atoms
+  read_data CPU = 0.468 seconds
+
+# ===== 如果需要，可检查 Masses 是否在数据文件里；若已包含，可删除下面两行 =====
+# mass 1 26.9815386         # Al
+# mass 2 63.546             # Cu
+
+# 3. 分组（按类型号；若你的 .lmp 中类型号相反，请互换 1/2）
+group substrate_group type 1   # 假定 1=Al（衬底）
+128000 atoms in group substrate_group
+group particle_group  type 2   # 假定 2=Cu（粒子）
+2899 atoms in group particle_group
+
+# 3.1 依据衬底实际厚度划分冻结/恒温/可动层（自动从几何计算）
+compute zmax_sub substrate_group reduce max z
+compute zmin_sub substrate_group reduce min z
+run 0                         # 初始化计算以获得 c_* 值
+WARNING: No fixes with time integration, atoms won't move
+For more information see https://docs.lammps.org/err0028 (src/verlet.cpp:60)
+WARNING: No pairwise cutoff or binsize set. Atom sorting therefore disabled. (src/atom.cpp:2446)
+WARNING: Communication cutoff is 0.0. No ghost atoms will be generated. Atoms may get lost. (src/comm_brick.cpp:212)
+Per MPI rank memory allocation (min/avg/max) = 2.297 | 2.31 | 2.323 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press     
+         0   0              0              0              0              0            
+Loop time of 1.27245e-05 on 40 procs for 0 steps with 130899 atoms
+
+99.2% CPU use with 40 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 0          | 0          | 0          |   0.0 |  0.00
+Neigh   | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0          | 0          | 0          |   0.0 |  0.00
+Output  | 0          | 0          | 0          |   0.0 |  0.00
+Modify  | 0          | 0          | 0          |   0.0 |  0.00
+Other   |            | 1.272e-05  |            |       |100.00
+
+Nlocal:        3272.47 ave        6080 max         320 min
+Histogram: 18 0 2 0 0 0 0 0 0 20
+Nghost:        374.825 ave         703 max          37 min
+Histogram: 19 0 1 0 0 0 0 0 0 20
+Neighs:              0 ave           0 max           0 min
+Histogram: 40 0 0 0 0 0 0 0 0 0
+
+Total # of neighbors = 0
+Ave neighs/atom = 0
+Neighbor list builds = 0
+Dangerous builds = 0
+variable zmin equal c_zmin_sub
+variable zmax equal c_zmax_sub
+
+# 你可按需要调整以下厚度（Å）
+variable frozen_layer_height     equal 40.0     # 冻结层厚度
+variable thermostat_layer_height equal 20.0     # 恒温层厚度
+variable thermostat_upper_z      equal ${zmin}+${frozen_layer_height}
+variable thermostat_upper_z      equal 0+${frozen_layer_height}
+variable thermostat_upper_z      equal 0+40
+variable mobile_layer_upper_z    equal ${zmax}
+variable mobile_layer_upper_z    equal 78.975
+
+# 区域与分组
+region frozen_layer     block INF INF INF INF ${zmin} ${thermostat_upper_z}     units box
+region frozen_layer     block INF INF INF INF 0 ${thermostat_upper_z}     units box
+region frozen_layer     block INF INF INF INF 0 40     units box
+region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \
+region thermostat_layer block INF INF INF INF 40 \
+ERROR: Expected floating point parameter instead of '\' in input script or data file (src/region_block.cpp:144)
+Last input line: region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \

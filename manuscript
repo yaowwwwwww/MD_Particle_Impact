@@ -1,31 +1,4 @@
-# -------------------- 高速粒子撞击（由 Atomsk 预构建几何） --------------------
-# 几何来自：impact_AlCu.lmp（Al 衬底 + Cu 球）
 
-# 1. 初始化和系统设置
-units           metal
-atom_style      atomic
-dimension       3
-boundary        p p f       # x/y 周期，z 非周期（固定盒）
-neighbor        1.5 bin        
-neigh_modify    delay 5
-
-# 2. 读取 Atomsk 生成的数据文件
-read_data       impact_AlCu.lmp
-
-# ===== 如果需要，可检查 Masses 是否在数据文件里；若已包含，可删除下面两行 =====
-# mass 1 26.9815386         # Al
-# mass 2 63.546             # Cu
-
-# 3. 分组（按类型号；若你的 .lmp 中类型号相反，请互换 1/2）
-group substrate_group type 1   # 假定 1=Al（衬底）
-group particle_group  type 2   # 假定 2=Cu（粒子）
-
-# 3.1 依据衬底实际厚度划分冻结/恒温/可动层（自动从几何计算）
-compute zmax_sub substrate_group reduce max z
-compute zmin_sub substrate_group reduce min z
-run 0                         # 初始化计算以获得 c_* 值
-variable zmin equal c_zmin_sub
-variable zmax equal c_zmax_sub
 
 # 你可按需要调整以下厚度（Å）
 variable frozen_layer_height     equal 40.0     # 冻结层厚度
