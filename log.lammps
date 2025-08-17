@@ -1,86 +1,190 @@
 LAMMPS (2 Apr 2025 - Development - patch_2Apr2025-232-g440e24c60e)
   using 1 OpenMP thread(s) per MPI task
-# -------------------- 高速粒子撞击（由 Atomsk 预构建几何） --------------------
-# 几何来自：impact_AlCu.lmp（Al 衬底 + Cu 球）
-
-# 1. 初始化和系统设置
 units           metal
 atom_style      atomic
 dimension       3
-boundary        p p f       # x/y 周期，z 非周期（固定盒）
+boundary        p p p
+neighbor        1.5 bin
+neigh_modify    delay 5
 
-# 2. 读取 Atomsk 生成的数据文件
+########### Atomsk data###########
 read_data       impact_AlCu.lmp
 Reading data file ...
   orthogonal box = (0 0 0) to (162 162 150)
   4 by 5 by 2 MPI processor grid
   reading atoms ...
   130899 atoms
-  read_data CPU = 0.468 seconds
+  read_data CPU = 0.608 seconds
+############        ##########
 
-# ===== 如果需要，可检查 Masses 是否在数据文件里；若已包含，可删除下面两行 =====
 # mass 1 26.9815386         # Al
 # mass 2 63.546             # Cu
 
-# 3. 分组（按类型号；若你的 .lmp 中类型号相反，请互换 1/2）
-group substrate_group type 1   # 假定 1=Al（衬底）
+group substrate_group type 1   #  1=Al（衬底）
 128000 atoms in group substrate_group
-group particle_group  type 2   # 假定 2=Cu（粒子）
+group particle_group  type 2   #  2=Cu（粒子）
 2899 atoms in group particle_group
 
-# 3.1 依据衬底实际厚度划分冻结/恒温/可动层（自动从几何计算）
-compute zmax_sub substrate_group reduce max z
-compute zmin_sub substrate_group reduce min z
-run 0                         # 初始化计算以获得 c_* 值
-WARNING: No fixes with time integration, atoms won't move
-For more information see https://docs.lammps.org/err0028 (src/verlet.cpp:60)
-WARNING: No pairwise cutoff or binsize set. Atom sorting therefore disabled. (src/atom.cpp:2446)
-WARNING: Communication cutoff is 0.0. No ghost atoms will be generated. Atoms may get lost. (src/comm_brick.cpp:212)
-Per MPI rank memory allocation (min/avg/max) = 2.297 | 2.31 | 2.323 Mbytes
-   Step          Temp          E_pair         E_mol          TotEng         Press     
-         0   0              0              0              0              0            
-Loop time of 1.27245e-05 on 40 procs for 0 steps with 130899 atoms
+variable T equal 300
 
-99.2% CPU use with 40 MPI tasks x 1 OpenMP threads
+pair_style  eam/alloy
+pair_coeff  * * /home/wuwen/lammps/potentials/AlCu.eam.alloy  Al  Cu
+Reading eam/alloy potential file /home/wuwen/lammps/potentials/AlCu.eam.alloy with DATE: 2008-10-01
+
+timestep        0.0005
+
+change_box all boundary p p s
+Changing box ...
+
+dump 1 all custom 500 relax.xyz id mass type x y z
+
+minimize 1.0e-12 1.0e-12 1000 1000
+Switching to 'neigh_modify every 1 delay 0 check yes' setting during minimization
+Neighbor list info ...
+  update: every = 1 steps, delay = 0 steps, check = yes
+  max neighbors/atom: 2000, page size: 100000
+  master list distance cutoff = 8.1825
+  ghost atom cutoff = 8.1825
+  binsize = 4.09125, bins = 40 40 32
+  1 neighbor lists, perpetual/occasional/extra = 1 0 0
+  (1) pair eam/alloy, perpetual
+      attributes: half, newton on
+      pair build: half/bin/atomonly/newton
+      stencil: half/bin/3d
+      bin: standard
+Per MPI rank memory allocation (min/avg/max) = 4.666 | 5.369 | 6.033 Mbytes
+   Step          Temp          E_pair         E_mol          TotEng         Press          Volume    
+         0   0             -432603.64      0             -432603.64     -1585.2738      3435667.6    
+        23   0             -432625.91      0             -432625.91     -858.13137      3435667.6    
+Loop time of 1.35835 on 40 procs for 23 steps with 130899 atoms
+
+98.9% CPU use with 40 MPI tasks x 1 OpenMP threads
+
+Minimization stats:
+  Stopping criterion = linesearch alpha is zero
+  Energy initial, next-to-last, final = 
+     -432603.639260543   -432625.90700846   -432625.90700846
+  Force two-norm initial, final = 14.124092 0.13113456
+  Force max component initial, final = 0.37864385 0.0035973836
+  Final line search alpha, max atom move = 4.7683716e-07 1.7153662e-09
+  Iterations, force evaluations = 23 87
 
 MPI task timing breakdown:
 Section |  min time  |  avg time  |  max time  |%varavg| %total
 ---------------------------------------------------------------
-Pair    | 0          | 0          | 0          |   0.0 |  0.00
+Pair    | 1.2801     | 1.2823     | 1.284      |   0.1 | 94.40
 Neigh   | 0          | 0          | 0          |   0.0 |  0.00
-Comm    | 0          | 0          | 0          |   0.0 |  0.00
+Comm    | 0.024684   | 0.029129   | 0.034301   |   2.1 |  2.14
 Output  | 0          | 0          | 0          |   0.0 |  0.00
 Modify  | 0          | 0          | 0          |   0.0 |  0.00
-Other   |            | 1.272e-05  |            |       |100.00
+Other   |            | 0.04694    |            |       |  3.46
 
-Nlocal:        3272.47 ave        6080 max         320 min
-Histogram: 18 0 2 0 0 0 0 0 0 20
-Nghost:        374.825 ave         703 max          37 min
-Histogram: 19 0 1 0 0 0 0 0 0 20
-Neighs:              0 ave           0 max           0 min
-Histogram: 40 0 0 0 0 0 0 0 0 0
+Nlocal:        3272.47 ave        5280 max        1120 min
+Histogram: 18 0 0 2 0 0 0 0 0 20
+Nghost:        5592.73 ave        8133 max        2867 min
+Histogram: 18 2 0 0 0 0 0 0 0 20
+Neighs:         221105 ave      369468 max       62888 min
+Histogram: 18 0 0 2 0 0 0 0 0 20
 
-Total # of neighbors = 0
-Ave neighs/atom = 0
+Total # of neighbors = 8844219
+Ave neighs/atom = 67.565214
 Neighbor list builds = 0
 Dangerous builds = 0
-variable zmin equal c_zmin_sub
-variable zmax equal c_zmax_sub
 
-# 你可按需要调整以下厚度（Å）
-variable frozen_layer_height     equal 40.0     # 冻结层厚度
-variable thermostat_layer_height equal 20.0     # 恒温层厚度
-variable thermostat_upper_z      equal ${zmin}+${frozen_layer_height}
-variable thermostat_upper_z      equal 0+${frozen_layer_height}
-variable thermostat_upper_z      equal 0+40
-variable mobile_layer_upper_z    equal ${zmax}
-variable mobile_layer_upper_z    equal 78.975
+write_data AlCu.relaxedmodel
+System init for write_data ...
 
-# 区域与分组
-region frozen_layer     block INF INF INF INF ${zmin} ${thermostat_upper_z}     units box
-region frozen_layer     block INF INF INF INF 0 ${thermostat_upper_z}     units box
-region frozen_layer     block INF INF INF INF 0 40     units box
-region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \
-region thermostat_layer block INF INF INF INF 40 \
-ERROR: Expected floating point parameter instead of '\' in input script or data file (src/region_block.cpp:144)
-Last input line: region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \
+velocity all create 300.0 4928459
+
+thermo_style custom step temp pxx pyy pzz press vol     ##print the component of thermal
+thermo 1000
+fix 1 all npt temp $T $T 0.5 x 0.0 0.0 0.12 y 0.0 0.0 0.12 drag 2
+fix 1 all npt temp 300 $T 0.5 x 0.0 0.0 0.12 y 0.0 0.0 0.12 drag 2
+fix 1 all npt temp 300 300 0.5 x 0.0 0.0 0.12 y 0.0 0.0 0.12 drag 2
+
+compute myP all pressure thermo_temp
+fix aveP all ave/time 100 50 5000 c_myP[1] c_myP[2] file press_xy.avg        ##average press.
+
+run 50000
+Per MPI rank memory allocation (min/avg/max) = 5.033 | 5.735 | 6.399 Mbytes
+   Step          Temp           Pxx            Pyy            Pzz           Press          Volume    
+        23   300            344.26938      349.53307      1468.2704      720.69093      3432091.6    
+      1000   152.73784      3.8037777      8.5367279      1214.6831      409.00786      3472985.7    
+      2000   157.41333      0.86745238    -6.2757159      495.94152      163.51108      3469247.8    
+      3000   161.65706      4.8440161     -4.2534202     -677.15806     -225.52249      3456927      
+      4000   165.59053      0.099531049   -0.28947732    -1351.4767     -450.55555      3453516.9    
+      5000   169.57915      13.241265     -9.5279929     -1695.1275     -563.80475      3444342.9    
+      6000   175.40673      1.1027414      5.996093      -1067.9709     -353.62401      3453308.7    
+      7000   181.32709      5.3603089     -4.5258672     -215.40603     -71.523864      3468750.6    
+      8000   185.90803     -4.9366333      16.622569      850.72588      287.47061      3480367.9    
+      9000   190.47417     -10.305206      7.1150767      1348.556       448.45529      3494912.1    
+     10000   195.9123       3.8917685      2.719754       1563.8894      523.50032      3494960.4    
+     11000   200.64131     -1.225286       4.3600979      1047.3844      350.17308      3489755.4    
+     12000   205.61584     -0.72608019    -8.8176016      191.52252      60.659612      3477741.6    
+     13000   210.00923     -7.2151095      3.6019689     -936.08581     -313.23298      3464407.9    
+     14000   213.70994      4.464743      -1.2793531     -1622.7682     -539.86092      3461599.2    
+     15000   217.76745      5.8811772     -2.211041      -1748.8423     -581.72405      3466899.4    
+     16000   223.24467     -1.3957833      4.7406023     -946.64371     -314.43296      3474140      
+     17000   228.56894      11.560861      0.27418042     123.69933      45.178125      3485926.4    
+     18000   233.15706     -7.1136103      7.6173012      1120.9575      373.8204       3502284.1    
+     19000   236.46018      6.7020907     -14.435613      1577.5296      523.26537      3515416.8    
+     20000   240.19604     -6.5577042      3.9355096      1536.8784      511.41873      3509084.3    
+     21000   246.04285     -3.6453331      11.139907      820.76019      276.08492      3503197.2    
+     22000   249.28179      7.7689011     -11.909815     -163.20605     -55.782321      3491782.8    
+     23000   252.08707     -8.2510533     -2.1325046     -1218.3684     -409.584        3486743.9    
+     24000   254.29674     -6.7567788      0.98346969    -1661.8842     -555.88585      3473168.2    
+     25000   258.47016      5.5697577      4.9146084     -1484.8169     -491.44419      3479521.3    
+     26000   262.64623      27.400319     -5.0772894     -691.96084     -223.2126       3482750.6    
+     27000   266.48302      11.377543      2.8138873      336.25207      116.8145       3499355.3    
+     28000   269.56218     -3.0664396      8.8744167      1114.5064      373.43814      3524753.6    
+     29000   271.97118     -6.8607449      11.038817      1489.4614      497.87983      3524954.7    
+     30000   274.78917      2.341897       1.6102376      1351.6912      451.8811       3531337.3    
+     31000   276.9133      -4.4046602     -1.5762533      764.8491       252.95606      3511228.3    
+     32000   278.94975     -11.421344      11.550604     -211.44506     -70.438598      3495566.7    
+     33000   281.12789     -2.1846578     -12.027701     -1069.6947     -361.30237      3493018.5    
+     34000   282.66205      5.995909       3.1715666     -1627.4071     -539.41322      3482061.5    
+     35000   284.83175     -8.4705522      14.215342     -1370.9381     -455.06444      3491167.9    
+     36000   287.37869      1.4106353     -0.45467117    -707.26472     -235.43625      3508962.8    
+     37000   289.71012     -10.137638      14.662922      354.44887      119.65805      3514170.7    
+     38000   291.24067      5.10799       -0.71183911     1066.3065      356.90089      3526441.2    
+     39000   290.82097     -15.448885      6.229456       1450.8963      480.55895      3527955.7    
+     40000   292.76451     -13.821937     -2.5618026      1218.3119      400.64273      3530418      
+     41000   294.98549      24.66508      -36.832624      685.16409      224.33218      3521097.9    
+     42000   294.60223      8.8994316     -20.4257       -250.39624     -87.307504      3509151      
+     43000   295.51018      4.5192896      2.0154733     -929.7934      -307.75288      3501165.2    
+     44000   295.80714     -6.3875937      5.6219964     -1514.8184     -505.19467      3490148.5    
+     45000   296.34699     -11.830409      19.598312     -1235.6252     -409.28578      3494507.2    
+     46000   297.97993      8.2372153     -1.7428452     -660.44689     -217.98417      3510554.2    
+     47000   299.31963      14.546463     -11.655653      278.0232       93.638004      3516948      
+     48000   299.42693      7.7769117     -11.059122      852.6264       283.11473      3527038.4    
+     49000   299.87154      19.769474     -1.1530185      1336.1121      451.5762       3537838.7    
+     50000   299.126       -19.050248      3.7540078      1121.2001      368.6346       3537516.7    
+     50023   299.58328     -3.4586906     -0.81684649     1120.316       372.01349      3537243.3    
+Loop time of 751.704 on 40 procs for 50000 steps with 130899 atoms
+
+Performance: 2.873 ns/day, 8.352 hours/ns, 66.516 timesteps/s, 8.707 Matom-step/s
+99.0% CPU use with 40 MPI tasks x 1 OpenMP threads
+
+MPI task timing breakdown:
+Section |  min time  |  avg time  |  max time  |%varavg| %total
+---------------------------------------------------------------
+Pair    | 362.98     | 534.4      | 701.77     | 695.8 | 71.09
+Neigh   | 0.75159    | 2.7723     | 5.6245     | 114.1 |  0.37
+Comm    | 21.78      | 190.43     | 363.18     |1173.6 | 25.33
+Output  | 1.1529     | 1.413      | 1.6705     |  13.1 |  0.19
+Modify  | 15.726     | 16.527     | 17.265     |  10.5 |  2.20
+Other   |            | 6.163      |            |       |  0.82
+
+Nlocal:        3272.47 ave        5343 max        1098 min
+Histogram: 18 0 0 2 0 0 0 0 0 20
+Nghost:        5019.32 ave        7340 max        2571 min
+Histogram: 14 4 2 0 0 0 0 0 0 20
+Neighs:         216728 ave      366565 max       58931 min
+Histogram: 18 0 0 2 0 0 0 0 0 20
+
+Total # of neighbors = 8669140
+Ave neighs/atom = 66.227702
+Neighbor list builds = 423
+Dangerous builds = 0
+unfix 1
+Total wall time: 0:12:34
