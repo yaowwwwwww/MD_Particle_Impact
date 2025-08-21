@@ -48,7 +48,7 @@ velocity frozen_atoms set 0.0 0.0 0.0
 # # # # # # #  # # # # # # #  # # # # # # #  # # # # # # #  
 
 # # # # # # #  
-velocity particle_group set 0.0 0.0 -5 sum yes units box
+velocity particle_group set 0.0 0.0 -2 sum yes units box
 
 group mobile_all subtract all frozen_atoms
 fix integ mobile_all nve
