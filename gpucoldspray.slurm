@@ -9,7 +9,7 @@
 # 切换到提交作业时的目录
 cd $SLURM_SUBMIT_DIR
 
-# 加载需要的模块（根据你 build lammps 时的环境）
+# 加载需要的模块（根据sever and build lammps 时的环境）
 module load StdEnv/2023 intel/2023.2.1 openmpi/4.1.5
 
 # 运行 LAMMPS（开启 Kokkos CUDA 后端）

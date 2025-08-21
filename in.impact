@@ -1,79 +1,60 @@
-# -------------------- 高速粒子撞击（由 Atomsk 预构建几何） --------------------
-# 几何来自：impact_AlCu.lmp（Al 衬底 + Cu 球）
-
-# 1. 初始化和系统设置
 units           metal
 atom_style      atomic
 dimension       3
-boundary        p p f       # x/y 周期，z 非周期（固定盒）
+boundary        p p p      
+neighbor        1.5 bin        
+neigh_modify    delay 5
 
-# 2. 读取 Atomsk 生成的数据文件
+########### Atomsk data###########
 read_data       impact_AlCu.lmp
+############        ##########
 
-# ===== 如果需要，可检查 Masses 是否在数据文件里；若已包含，可删除下面两行 =====
-# mass 1 26.9815386         # Al
-# mass 2 63.546             # Cu
+group substrate_group type 1   #  1=Al（衬底）
+group particle_group  type 2   #  2=Cu（粒子）
 
-# 3. 分组（按类型号；若你的 .lmp 中类型号相反，请互换 1/2）
-group substrate_group type 1   # 假定 1=Al（衬底）
-group particle_group  type 2   # 假定 2=Cu（粒子）
+variable T equal 300
 
-# 3.1 依据衬底实际厚度划分冻结/恒温/可动层（自动从几何计算）
-compute zmax_sub substrate_group reduce max z
-compute zmin_sub substrate_group reduce min z
-run 0                         # 初始化计算以获得 c_* 值
-variable zmin equal c_zmin_sub
-variable zmax equal c_zmax_sub
+pair_style  eam/alloy
+pair_coeff  * * /home/wuwen123/comp/yao/lammps/potentials/AlCu.eam.alloy  Al  Cu
 
-# 你可按需要调整以下厚度（Å）
-variable frozen_layer_height     equal 40.0     # 冻结层厚度
-variable thermostat_layer_height equal 20.0     # 恒温层厚度
-variable thermostat_upper_z      equal ${zmin}+${frozen_layer_height}
-variable mobile_layer_upper_z    equal ${zmax}
+timestep        0.0005
 
-# 区域与分组
-region frozen_layer     block INF INF INF INF ${zmin} ${thermostat_upper_z}     units box
-region thermostat_layer block INF INF INF INF ${thermostat_upper_z} \
-                                  ${thermostat_upper_z}+${thermostat_layer_height} units box
-region mobile_layer     block INF INF INF INF ${thermostat_upper_z}+${thermostat_layer_height} \
-                                  ${mobile_layer_upper_z} units box
+change_box all boundary p p s
 
-group  frozen_atoms     region frozen_layer
-group  thermostat_atoms region thermostat_layer
-group  mobile_atoms     region mobile_layer
+dump 1 all custom 500 relax.xyz id mass type x y z
 
-# 整体 NVE 积分组 = 粒子(Cu) + 可动衬底
-group  nve_atoms union particle_group mobile_atoms
+minimize 1.0e-12 1.0e-12 1000 1000
 
-# 4. 初始温度与撞击速度
-velocity mobile_atoms   create 300.0 12345 mom yes rot yes dist gaussian
-variable impact_vel     equal -5.0                 # 5 Å/ps ≈ 500 m/s，沿 -z
-velocity particle_group set 0.0 0.0 ${impact_vel} sum yes units box
+write_data AlCu.relaxedmodel
 
-# 5. 势函数（建议使用含 Al&Cu 的 EAM/alloy 势）
-pair_style eam/alloy
-# 替换成你本机的势文件路径；元素映射顺序要与类型一致（1=Al, 2=Cu）
-variable POTFILE string /path/to/AlCu.eam.alloy
-pair_coeff * * ${POTFILE} Al Cu
+velocity all create 300.0 4928459
 
-# 若暂时找不到 Al-Cu 合金势，可以临时用 hybrid/overlay + lj/cut 给跨项做占位（不建议长期使用）
-# pair_style hybrid/overlay eam/alloy lj/cut 10
-# pair_coeff * * eam/alloy ${POTFILE} Al Cu
-# pair_coeff 1 2 lj/cut 0.0000001 10
+thermo_style custom step temp pxx pyy pzz press vol     ##print the component of thermal
+thermo 1000
+fix 1 all npt temp $T $T 0.5 x 0.0 0.0 0.12 y 0.0 0.0 0.12 drag 2
 
-# 6. 约束与积分
-fix 1 frozen_atoms     setforce 0.0 0.0 0.0
-velocity frozen_atoms  set 0 0 0
-fix 2 thermostat_atoms nvt temp 300.0 300.0 0.1
-fix 3 nve_atoms        nve
+compute myP all pressure thermo_temp
+fix aveP all ave/time 100 50 5000 c_myP[1] c_myP[2] file press_xy.avg        ##average press.
 
-# 7. 输出
-thermo_style custom step time temp pe ke etotal press
-thermo 200
-dump 1 all custom 200 dump.impact.lammpstrj id type x y z vx vy vz
+run 50000
+unfix 1
 
-# 8. 运行
-timestep 0.0001    # 0.1 fs
-run 100000         # 10 ps
+# # # # # # #   frozen_layer  # # # # # # # # 
+variable frozen_layer_thick equal 10  #  frozen_layer
+region frozen_layer block INF INF INF INF 0.0 ${frozen_layer_thick} units box
+group frozen_atoms region frozen_layer
+fix freeze frozen_atoms setforce 0.0 0.0 0.0
+velocity frozen_atoms set 0.0 0.0 0.0
+# # # # # # #  # # # # # # #  # # # # # # #  # # # # # # #  
 
-write_restart restart.impact
+# # # # # # #  
+velocity particle_group set 0.0 0.0 -5 sum yes units box
+
+group mobile_all subtract all frozen_atoms
+fix integ mobile_all nve
+
+thermo 1000
+
+dump 2 all custom 200 impact_1.lammpstrj id type x y z vx vy vz
+
+run 50000
