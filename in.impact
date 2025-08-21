@@ -9,16 +9,13 @@ neigh_modify    delay 5
 read_data       impact_AlCu.lmp
 ############        ##########
 
-# mass 1 26.9815386         # Al
-# mass 2 63.546             # Cu
-
 group substrate_group type 1   #  1=Al（衬底）
 group particle_group  type 2   #  2=Cu（粒子）
 
 variable T equal 300
 
 pair_style  eam/alloy
-pair_coeff  * * /home/wuwen/lammps/potentials/AlCu.eam.alloy  Al  Cu
+pair_coeff  * * /home/wuwen123/comp/yao/lammps/potentials/AlCu.eam.alloy  Al  Cu
 
 timestep        0.0005
 
@@ -41,3 +38,23 @@ fix aveP all ave/time 100 50 5000 c_myP[1] c_myP[2] file press_xy.avg        ##a
 
 run 50000
 unfix 1
+
+# # # # # # #   frozen_layer  # # # # # # # # 
+variable frozen_layer_thick equal 10  #  frozen_layer
+region frozen_layer block INF INF INF INF 0.0 ${frozen_layer_thick} units box
+group frozen_atoms region frozen_layer
+fix freeze frozen_atoms setforce 0.0 0.0 0.0
+velocity frozen_atoms set 0.0 0.0 0.0
+# # # # # # #  # # # # # # #  # # # # # # #  # # # # # # #  
+
+# # # # # # #  
+velocity particle_group set 0.0 0.0 -2 sum yes units box
+
+group mobile_all subtract all frozen_atoms
+fix integ mobile_all nve
+
+thermo 1000
+
+dump 2 all custom 200 impact_1.lammpstrj id type x y z vx vy vz
+
+run 50000
