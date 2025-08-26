@@ -13,15 +13,25 @@ group substrate_group type 1   #  1=Al（衬底）
 group particle_group  type 2   #  2=Cu（粒子）
 
 variable T equal 300
+#####################!!!!!cutoffdist!!!!!################################
+variable cutoffdist equal 5
+#####################!!!!!cutoffdist!!!!!################################
+variable ljstrength equal 1.2
+variable validljradius equal 4.15
+#####################!!!!!impactve_locity!!!!!################################
+##variable impactvelocity equal -5
+######################!!!!!impact_velocity!!!!###############################
+##***##***##***###***LJ:::rc = 3 Å,𝜖=0.1ϵ=0.1，𝜎=3.0σ=3.0。##***##***##***##***rc>rmin=1.122𝜎
 
-pair_style  eam/alloy
-pair_coeff  * * /home/wuwen123/comp/yao/lammps/potentials/AlCu.eam.alloy  Al  Cu
+pair_style hybrid/overlay eam/alloy  lj/cut ${cutoffdist}
+pair_coeff * * eam/alloy /home/wuwen123/comp/yao/lammps/potentials/AlCu.eam.alloy  Al  Cu
+pair_coeff 1 2 lj/cut ${ljstrength} ${validljradius}
 
 timestep        0.0005
 
 change_box all boundary p p s
 
-dump 1 all custom 500 relax.xyz id mass type x y z
+#dump 1 all custom 500 relax.xyz id mass type x y z
 
 minimize 1.0e-12 1.0e-12 1000 1000
 
@@ -33,8 +43,8 @@ thermo_style custom step temp pxx pyy pzz press vol     ##print the component of
 thermo 1000
 fix 1 all npt temp $T $T 0.5 x 0.0 0.0 0.12 y 0.0 0.0 0.12 drag 2
 
-compute myP all pressure thermo_temp
-fix aveP all ave/time 100 50 5000 c_myP[1] c_myP[2] file press_xy.avg        ##average press.
+#compute myP all pressure thermo_temp
+#fix aveP all ave/time 100 50 5000 c_myP[1] c_myP[2] file press_xy.avg        ##average press.
 
 run 50000
 unfix 1
@@ -48,13 +58,15 @@ velocity frozen_atoms set 0.0 0.0 0.0
 # # # # # # #  # # # # # # #  # # # # # # #  # # # # # # #  
 
 # # # # # # #  
-velocity particle_group set 0.0 0.0 -2 sum yes units box
+
+velocity particle_group set 0.0 0.0 ${impactvelocity} sum yes units box
 
 group mobile_all subtract all frozen_atoms
 fix integ mobile_all nve
 
 thermo 1000
-
-dump 2 all custom 200 impact_1.lammpstrj id type x y z vx vy vz
+ 
+dump 2 all custom 200 impact_${impactvelocity}.lammpstrj id type x y z vx vy vz
+dump_modify 2 sort id
 
 run 50000
